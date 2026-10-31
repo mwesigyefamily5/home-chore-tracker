@@ -1,5 +1,5 @@
 
-const CACHE_NAME = "home-chore-tracker-v1";
+const CACHE_NAME = "home-chore-tracker-v2";
 
 const FILES_TO_CACHE = [
   "./",
