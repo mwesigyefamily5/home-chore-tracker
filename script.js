@@ -1,12 +1,15 @@
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+import { initializeFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, persistentLocalCache, persistentMultipleTabManager } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+
 import { firebaseConfig } from './firebase-config.js';
 
 const chores=[['Washing utensils (cups, plates etc.)',1500],['Sweeping the house',2000],['Clearing the table',1000],['Sweeping the compound',3000],['Arranging shoes in the rack',1000],['Organizing the room',2500],['Mopping the house',2000],['Washing the car',5000],['Polishing shoes',1000],['Washing socks or light clothes',2500],['Preparing breakfast',2000],['Serving meals (visitors or parents)',1000],['Washing shoes',2000],['Ironing clothes',2000],['Cleaning toilet or bathroom',1500]];
 const kids=['Brody','Mia','Bradley'], $=id=>document.getElementById(id), money=n=>'UGX '+n.toLocaleString('en-UG');
 const localDate=()=>{let d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};
-const app=initializeApp(firebaseConfig),auth=getAuth(app),db=getFirestore(app);
+
+const app=initializeApp(firebaseConfig),auth=getAuth(app),db=initializeFirestore(app,{localCache:persistentLocalCache({tabManager:persistentMultipleTabManager()})});
+
 let records=[],unsubscribe=null,ready=false, busy=false;
 const status=s=>$('syncStatus').textContent=s;
 const valid=r=>kids.includes(r.child)&&/^\d{4}-\d{2}-\d{2}$/.test(r.date)&&Number.isInteger(r.chore)&&r.chore>=0&&r.chore<chores.length&&typeof r.done==='boolean';
