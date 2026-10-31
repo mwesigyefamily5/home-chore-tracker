@@ -42,7 +42,6 @@ const localDate = () => {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
-
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
@@ -54,10 +53,9 @@ let unsubscribe = null;
 let ready = false;
 let busy = false;
 
-const status = s => $('syncStatus').textContent = s;
-
-// Each chore entry has its own ID, so duplicates are allowed.
-const key = r => r.id;
+const status = message => {
+  $('syncStatus').textContent = message;
+};
 
 const valid = r =>
   typeof r.id === 'string' &&
@@ -69,23 +67,27 @@ const valid = r =>
   typeof r.done === 'boolean';
 
 const ref = r =>
-  doc(db, 'families', auth.currentUser.uid, 'records', key(r));
+  doc(db, 'families', auth.currentUser.uid, 'records', r.id);
 
 async function save(r) {
-  if (!ready) return;
+  if (!ready || !auth.currentUser) return false;
+
   status('Saving…');
 
   try {
     await setDoc(ref(r), r);
     status('✓ Saved for everyone');
+    return true;
   } catch (e) {
     status('Save failed — try again');
     alert('Could not save: ' + e.message);
+    return false;
   }
 }
 
 async function remove(r) {
-  if (!ready) return;
+  if (!ready || !auth.currentUser) return;
+
   status('Saving…');
 
   try {
@@ -107,6 +109,7 @@ $('loginForm').onsubmit = async e => {
       $('email').value.trim(),
       $('password').value
     );
+
     $('password').value = '';
     $('loginError').textContent = '';
   } catch {
@@ -125,6 +128,7 @@ onAuthStateChanged(auth, user => {
 
   records = [];
   ready = false;
+
   $('loginPanel').hidden = !!user;
   $('app').hidden = !user;
 
@@ -135,12 +139,12 @@ onAuthStateChanged(auth, user => {
   unsubscribe = onSnapshot(
     collection(db, 'families', user.uid, 'records'),
     snapshot => {
-      // Older records get their existing Firebase document ID.
       records = snapshot.docs
         .map(d => ({ ...d.data(), id: d.id }))
         .filter(valid);
 
       ready = true;
+
       status(
         snapshot.metadata.hasPendingWrites
           ? 'Saving…'
@@ -172,7 +176,8 @@ $('date').onchange = render;
 
 const current = () =>
   records.filter(
-    r => r.child === $('child').value && r.date === $('date').value
+    r => r.child === $('child').value &&
+         r.date === $('date').value
   );
 
 const month = () => $('date').value.slice(0, 7);
@@ -182,7 +187,7 @@ function render() {
 
   $('dayTotal').textContent = money(
     list.reduce(
-      (s, r) => s + (r.done ? chores[r.chore][1] : 0),
+      (sum, r) => sum + (r.done ? chores[r.chore][1] : 0),
       0
     )
   );
@@ -190,26 +195,25 @@ function render() {
   $('monthTotal').textContent = money(
     records
       .filter(
-        r =>
-          r.child === $('child').value &&
-          r.date.startsWith(month()) &&
-          r.done
+        r => r.child === $('child').value &&
+             r.date.startsWith(month()) &&
+             r.done
       )
-      .reduce((s, r) => s + chores[r.chore][1], 0)
+      .reduce((sum, r) => sum + chores[r.chore][1], 0)
   );
 
   $('completed').textContent =
     list.filter(r => r.done).length + ' / ' + list.length;
 
-  const el = $('entries');
-  el.replaceChildren();
+  const entries = $('entries');
+  entries.replaceChildren();
 
   if (!list.length) {
     const empty = document.createElement('div');
     empty.className = 'empty';
     empty.textContent =
       '🌟 No chores added yet. Tap “Add chores” to get started!';
-    el.append(empty);
+    entries.append(empty);
   }
 
   list.forEach(r => {
@@ -219,10 +223,7 @@ function render() {
     const check = document.createElement('input');
     check.type = 'checkbox';
     check.checked = r.done;
-    check.setAttribute(
-      'aria-label',
-      'Mark ' + chores[r.chore][0] + ' done'
-    );
+    check.setAttribute('aria-label', 'Mark chore completed');
     check.onchange = () => save({ ...r, done: check.checked });
 
     const name = document.createElement('div');
@@ -244,19 +245,18 @@ function render() {
     del.onclick = () => remove(r);
 
     row.append(check, name, amount, del);
-    el.append(row);
+    entries.append(row);
   });
 
   const totals = kids.map(child => ({
     child,
     total: records
       .filter(
-        r =>
-          r.child === child &&
-          r.date.startsWith(month()) &&
-          r.done
+        r => r.child === child &&
+             r.date.startsWith(month()) &&
+             r.done
       )
-      .reduce((s, r) => s + chores[r.chore][1], 0)
+      .reduce((sum, r) => sum + chores[r.chore][1], 0)
   }));
 
   const max = Math.max(1, ...totals.map(t => t.total));
@@ -286,10 +286,10 @@ function render() {
     fill.style.width = (t.total / max * 100) + '%';
     track.append(fill);
 
-    const val = document.createElement('strong');
-    val.textContent = money(t.total);
+    const value = document.createElement('strong');
+    value.textContent = money(t.total);
 
-    row.append(label, track, val);
+    row.append(label, track, value);
     board.append(row);
   });
 }
@@ -298,13 +298,13 @@ chores.forEach(([name, price]) => {
   const row = document.createElement('div');
   row.className = 'price';
 
-  const a = document.createElement('span');
-  a.textContent = name;
+  const label = document.createElement('span');
+  label.textContent = name;
 
-  const b = document.createElement('b');
-  b.textContent = money(price);
+  const amount = document.createElement('b');
+  amount.textContent = money(price);
 
-  row.append(a, b);
+  row.append(label, amount);
   $('prices').append(row);
 });
 
@@ -322,13 +322,14 @@ $('add').onclick = () => {
     input.type = 'checkbox';
     input.value = i;
 
-    const span = document.createElement('span');
-    span.textContent = name;
+    // No duplicate check: the same chore can be selected again.
+    const text = document.createElement('span');
+    text.textContent = name;
 
-    const small = document.createElement('small');
-    small.textContent = money(price);
+    const amount = document.createElement('small');
+    amount.textContent = money(price);
 
-    label.append(input, span, small);
+    label.append(input, text, amount);
     box.append(label);
   });
 
@@ -342,7 +343,7 @@ $('saveChoices').onclick = async e => {
 
   const selected = [
     ...$('choices').querySelectorAll('input:checked')
-  ].map(x => Number(x.value));
+  ].map(input => Number(input.value));
 
   if (!selected.length) return;
 
@@ -353,7 +354,7 @@ $('saveChoices').onclick = async e => {
   const date = $('date').value;
 
   try {
-    await Promise.all(
+    const results = await Promise.all(
       selected.map(chore =>
         save({
           id: crypto.randomUUID(),
@@ -365,7 +366,9 @@ $('saveChoices').onclick = async e => {
       )
     );
 
-    $('picker').close();
+    if (results.every(Boolean)) {
+      $('picker').close();
+    }
   } finally {
     busy = false;
     $('saveChoices').disabled = false;
@@ -408,11 +411,7 @@ $('import').onchange = async e => {
       throw Error('Invalid backup');
     }
 
-    if (
-      confirm(
-        'Add these backup entries to the shared family database? Matching entries will be overwritten.'
-      )
-    ) {
+    if (confirm('Import these entries into the shared family database?')) {
       for (const r of data.records) {
         await save({
           ...r,
