@@ -1,4 +1,6 @@
+
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
+
 import {
   getAuth,
   onAuthStateChanged,
@@ -65,7 +67,6 @@ const status = message => {
   $('syncStatus').textContent = message;
 };
 
-// A normal chore record
 const validChore = r =>
   kids.includes(r.child) &&
   /^\d{4}-\d{2}-\d{2}$/.test(r.date) &&
@@ -74,7 +75,6 @@ const validChore = r =>
   r.chore < chores.length &&
   typeof r.done === 'boolean';
 
-// A withdrawal record
 const validWithdrawal = r =>
   r.type === 'withdrawal' &&
   kids.includes(r.child) &&
@@ -82,16 +82,17 @@ const validWithdrawal = r =>
   Number.isSafeInteger(r.amount) &&
   r.amount > 0;
 
-// Supports old chore records as well as new withdrawals
 const validRecord = r =>
   typeof r.id === 'string' &&
-  (r.type === 'withdrawal' ? validWithdrawal(r) : validChore(r));
+  (r.type === 'withdrawal'
+    ? validWithdrawal(r)
+    : validChore(r));
 
 const choreRecords = () =>
   records.filter(r => r.type !== 'withdrawal' && validChore(r));
 
 const withdrawalRecords = () =>
-  records.filter(r => r.type === 'withdrawal' && validWithdrawal(r));
+  records.filter(r => validWithdrawal(r));
 
 const ref = r =>
   doc(db, 'families', auth.currentUser.uid, 'records', r.id);
@@ -126,7 +127,7 @@ async function remove(r) {
   }
 }
 
-// Calculate money for one child
+// Calculate lifetime earnings, withdrawals and balance
 function moneySummary(child) {
   const earned = choreRecords()
     .filter(r => r.child === child && r.done)
@@ -165,7 +166,7 @@ $('loginForm').onsubmit = async e => {
 
 $('signout').onclick = () => signOut(auth);
 
-// Listen for shared family records
+// Listen to Firestore
 onAuthStateChanged(auth, user => {
   if (unsubscribe) {
     unsubscribe();
@@ -254,7 +255,7 @@ function render() {
   $('completed').textContent =
     list.filter(r => r.done).length + ' / ' + list.length;
 
-  // Lifetime savings summary
+  // Lifetime money summary
   const summary = moneySummary(child);
 
   $('lifetimeEarned').textContent = money(summary.earned);
@@ -351,11 +352,10 @@ function render() {
     board.append(row);
   });
 
-  // Withdrawal history
   renderWithdrawalHistory(child);
 }
 
-// Show withdrawals for the selected child
+// Withdrawal history
 function renderWithdrawalHistory(child) {
   const history = $('withdrawalHistory');
   history.replaceChildren();
@@ -475,7 +475,7 @@ $('saveChoices').onclick = async e => {
   }
 };
 
-// NEW: Make a withdrawal
+// Make a withdrawal
 $('withdrawalForm').onsubmit = async e => {
   e.preventDefault();
 
@@ -495,16 +495,14 @@ $('withdrawalForm').onsubmit = async e => {
 
   if (amount > summary.balance) {
     $('withdrawalMessage').textContent =
-      'Not enough money available. The balance is ' +
-      money(summary.balance) + '.';
+      'Not enough money available. Balance: ' +
+      money(summary.balance);
     return;
   }
 
-  const confirmed = confirm(
+  if (!confirm(
     'Withdraw ' + money(amount) + ' from ' + child + '?'
-  );
-
-  if (!confirmed) return;
+  )) return;
 
   busy = true;
 
