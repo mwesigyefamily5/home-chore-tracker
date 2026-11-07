@@ -1,0 +1,11 @@
+{
+  "name": "Home Chore Tracker",
+  "short_name": "Chore Tracker",
+  "description": "A family chore and earnings tracker.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait"
+}
