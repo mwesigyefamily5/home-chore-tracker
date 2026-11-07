@@ -1,6 +1,11 @@
-
 import { initializeApp } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+import {
+  getAuth,
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signOut
+} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
+
 import {
   initializeFirestore,
   collection,
@@ -11,6 +16,7 @@ import {
   persistentLocalCache,
   persistentMultipleTabManager
 } from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
+
 import { firebaseConfig } from './firebase-config.js';
 
 const chores = [
@@ -32,6 +38,7 @@ const chores = [
 ];
 
 const kids = ['Brody', 'Mia', 'Bradley'];
+
 const $ = id => document.getElementById(id);
 const money = n => 'UGX ' + n.toLocaleString('en-UG');
 
@@ -42,6 +49,7 @@ const localDate = () => {
 
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
+
 const db = initializeFirestore(app, {
   localCache: persistentLocalCache({
     tabManager: persistentMultipleTabManager()
@@ -57,14 +65,33 @@ const status = message => {
   $('syncStatus').textContent = message;
 };
 
-const valid = r =>
-  typeof r.id === 'string' &&
+// A normal chore record
+const validChore = r =>
   kids.includes(r.child) &&
   /^\d{4}-\d{2}-\d{2}$/.test(r.date) &&
   Number.isInteger(r.chore) &&
   r.chore >= 0 &&
   r.chore < chores.length &&
   typeof r.done === 'boolean';
+
+// A withdrawal record
+const validWithdrawal = r =>
+  r.type === 'withdrawal' &&
+  kids.includes(r.child) &&
+  /^\d{4}-\d{2}-\d{2}$/.test(r.date) &&
+  Number.isSafeInteger(r.amount) &&
+  r.amount > 0;
+
+// Supports old chore records as well as new withdrawals
+const validRecord = r =>
+  typeof r.id === 'string' &&
+  (r.type === 'withdrawal' ? validWithdrawal(r) : validChore(r));
+
+const choreRecords = () =>
+  records.filter(r => r.type !== 'withdrawal' && validChore(r));
+
+const withdrawalRecords = () =>
+  records.filter(r => r.type === 'withdrawal' && validWithdrawal(r));
 
 const ref = r =>
   doc(db, 'families', auth.currentUser.uid, 'records', r.id);
@@ -99,6 +126,24 @@ async function remove(r) {
   }
 }
 
+// Calculate money for one child
+function moneySummary(child) {
+  const earned = choreRecords()
+    .filter(r => r.child === child && r.done)
+    .reduce((sum, r) => sum + chores[r.chore][1], 0);
+
+  const withdrawn = withdrawalRecords()
+    .filter(r => r.child === child)
+    .reduce((sum, r) => sum + r.amount, 0);
+
+  return {
+    earned,
+    withdrawn,
+    balance: earned - withdrawn
+  };
+}
+
+// Sign in
 $('loginForm').onsubmit = async e => {
   e.preventDefault();
   $('loginError').textContent = 'Signing in…';
@@ -120,6 +165,7 @@ $('loginForm').onsubmit = async e => {
 
 $('signout').onclick = () => signOut(auth);
 
+// Listen for shared family records
 onAuthStateChanged(auth, user => {
   if (unsubscribe) {
     unsubscribe();
@@ -134,14 +180,14 @@ onAuthStateChanged(auth, user => {
 
   if (!user) return;
 
-  status('Loading shared chores…');
+  status('Loading shared records…');
 
   unsubscribe = onSnapshot(
     collection(db, 'families', user.uid, 'records'),
     snapshot => {
       records = snapshot.docs
         .map(d => ({ ...d.data(), id: d.id }))
-        .filter(valid);
+        .filter(validRecord);
 
       ready = true;
 
@@ -160,6 +206,7 @@ onAuthStateChanged(auth, user => {
   );
 });
 
+// Child selector
 $('child').innerHTML = kids
   .map(k => `<option>${k}</option>`)
   .join('');
@@ -175,14 +222,16 @@ $('child').onchange = render;
 $('date').onchange = render;
 
 const current = () =>
-  records.filter(
+  choreRecords().filter(
     r => r.child === $('child').value &&
          r.date === $('date').value
   );
 
 const month = () => $('date').value.slice(0, 7);
 
+// Main display
 function render() {
+  const child = $('child').value;
   const list = current();
 
   $('dayTotal').textContent = money(
@@ -193,9 +242,9 @@ function render() {
   );
 
   $('monthTotal').textContent = money(
-    records
+    choreRecords()
       .filter(
-        r => r.child === $('child').value &&
+        r => r.child === child &&
              r.date.startsWith(month()) &&
              r.done
       )
@@ -205,6 +254,14 @@ function render() {
   $('completed').textContent =
     list.filter(r => r.done).length + ' / ' + list.length;
 
+  // Lifetime savings summary
+  const summary = moneySummary(child);
+
+  $('lifetimeEarned').textContent = money(summary.earned);
+  $('totalWithdrawn').textContent = money(summary.withdrawn);
+  $('availableBalance').textContent = money(summary.balance);
+
+  // Today's chores
   const entries = $('entries');
   entries.replaceChildren();
 
@@ -248,11 +305,12 @@ function render() {
     entries.append(row);
   });
 
-  const totals = kids.map(child => ({
-    child,
-    total: records
+  // Monthly leaderboard
+  const totals = kids.map(childName => ({
+    child: childName,
+    total: choreRecords()
       .filter(
-        r => r.child === child &&
+        r => r.child === childName &&
              r.date.startsWith(month()) &&
              r.done
       )
@@ -292,8 +350,50 @@ function render() {
     row.append(label, track, value);
     board.append(row);
   });
+
+  // Withdrawal history
+  renderWithdrawalHistory(child);
 }
 
+// Show withdrawals for the selected child
+function renderWithdrawalHistory(child) {
+  const history = $('withdrawalHistory');
+  history.replaceChildren();
+
+  const list = withdrawalRecords()
+    .filter(r => r.child === child)
+    .sort((a, b) => b.date.localeCompare(a.date));
+
+  if (!list.length) {
+    const empty = document.createElement('div');
+    empty.className = 'empty';
+    empty.textContent = 'No withdrawals yet.';
+    history.append(empty);
+    return;
+  }
+
+  list.forEach(r => {
+    const row = document.createElement('div');
+    row.className = 'entry';
+
+    const name = document.createElement('div');
+    name.className = 'name';
+    name.textContent = 'Withdrawal';
+
+    const date = document.createElement('small');
+    date.textContent = r.date;
+    name.append(date);
+
+    const amount = document.createElement('span');
+    amount.className = 'amount';
+    amount.textContent = '− ' + money(r.amount);
+
+    row.append(name, amount);
+    history.append(row);
+  });
+}
+
+// Chore price list
 chores.forEach(([name, price]) => {
   const row = document.createElement('div');
   row.className = 'price';
@@ -308,6 +408,7 @@ chores.forEach(([name, price]) => {
   $('prices').append(row);
 });
 
+// Add chores
 $('add').onclick = () => {
   if (!ready) return;
 
@@ -322,7 +423,6 @@ $('add').onclick = () => {
     input.type = 'checkbox';
     input.value = i;
 
-    // No duplicate check: the same chore can be selected again.
     const text = document.createElement('span');
     text.textContent = name;
 
@@ -375,6 +475,65 @@ $('saveChoices').onclick = async e => {
   }
 };
 
+// NEW: Make a withdrawal
+$('withdrawalForm').onsubmit = async e => {
+  e.preventDefault();
+
+  if (!ready || busy) return;
+
+  const child = $('child').value;
+  const amount = Number($('withdrawalAmount').value);
+  const summary = moneySummary(child);
+
+  $('withdrawalMessage').textContent = '';
+
+  if (!Number.isSafeInteger(amount) || amount <= 0) {
+    $('withdrawalMessage').textContent =
+      'Please enter a valid whole amount.';
+    return;
+  }
+
+  if (amount > summary.balance) {
+    $('withdrawalMessage').textContent =
+      'Not enough money available. The balance is ' +
+      money(summary.balance) + '.';
+    return;
+  }
+
+  const confirmed = confirm(
+    'Withdraw ' + money(amount) + ' from ' + child + '?'
+  );
+
+  if (!confirmed) return;
+
+  busy = true;
+
+  const button = $('withdrawalForm').querySelector('button');
+  button.disabled = true;
+
+  const withdrawal = {
+    id: crypto.randomUUID(),
+    type: 'withdrawal',
+    child,
+    date: localDate(),
+    amount
+  };
+
+  try {
+    const success = await save(withdrawal);
+
+    if (success) {
+      $('withdrawalAmount').value = '';
+      $('withdrawalMessage').textContent =
+        '✓ Withdrawal recorded successfully!';
+    }
+  } finally {
+    busy = false;
+    button.disabled = false;
+  }
+};
+
+// Export backup
 $('export').onclick = () => {
   const blob = new Blob(
     [JSON.stringify({ version: 1, records }, null, 2)],
@@ -389,6 +548,7 @@ $('export').onclick = () => {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 };
 
+// Import backup
 $('import').onchange = async e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -400,12 +560,9 @@ $('import').onchange = async e => {
       data.version !== 1 ||
       !Array.isArray(data.records) ||
       !data.records.every(r =>
-        kids.includes(r.child) &&
-        /^\d{4}-\d{2}-\d{2}$/.test(r.date) &&
-        Number.isInteger(r.chore) &&
-        r.chore >= 0 &&
-        r.chore < chores.length &&
-        typeof r.done === 'boolean'
+        r.type === 'withdrawal'
+          ? validWithdrawal(r)
+          : validChore(r)
       )
     ) {
       throw Error('Invalid backup');
