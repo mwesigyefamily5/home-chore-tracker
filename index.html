@@ -2,67 +2,102 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <link rel="manifest" href="./manifest.json">
-<meta name="theme-color" content="#2563eb">
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Home Chore Tracker</title>
+  <meta name="theme-color" content="#0b1726">
+  <title>Mwesigye Family | Chore Tracker</title>
+  <link rel="manifest" href="./manifest.json">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
 <main class="wrap">
 
   <section id="loginPanel" class="panel login-panel">
-    <h2>🔐 Family sign in</h2>
-    <p>Sign in with the family account to see shared chores.</p>
+    <div class="brand-logo">
+      <svg viewBox="0 0 100 100" role="img" aria-label="House and checkmark logo">
+        <path d="M12 46 50 15 88 46" fill="none" stroke="#20c9b0" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M23 42v43h54V42" fill="none" stroke="#f3f7fc" stroke-width="7" stroke-linejoin="round"/>
+        <path d="m37 62 9 9 19-21" fill="none" stroke="#20c9b0" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
+    </div>
+    <span class="eyebrow">MWESIGYE FAMILY</span>
+    <h2>Welcome back</h2>
+    <p>Sign in to manage your family's chores and savings.</p>
+
     <form id="loginForm">
-      <label>Email<input id="email" type="email" autocomplete="username" required></label>
-      <label>Password<input id="password" type="password" autocomplete="current-password" required></label>
-      <button class="primary" type="submit">Sign in</button>
+      <label>Email<input id="email" type="email" autocomplete="username" placeholder="Family email" required></label>
+      <label>Password<input id="password" type="password" autocomplete="current-password" placeholder="Password" required></label>
+      <button class="primary" type="submit">Sign in <span>→</span></button>
     </form>
     <p id="loginError" role="alert"></p>
   </section>
 
   <div id="app" hidden>
-    <header>
-      <div>
-        <span class="eyebrow">✨ OUR FAMILY DASHBOARD</span>
-        <h1>Home Chore Tracker</h1>
-        <p>Choose chores, tick them off, and watch your earnings grow.</p>
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <path d="M12 46 50 15 88 46" fill="none" stroke="#20c9b0" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M23 42v43h54V42" fill="none" stroke="#f3f7fc" stroke-width="7" stroke-linejoin="round"/>
+            <path d="m37 62 9 9 19-21" fill="none" stroke="#20c9b0" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </div>
+        <div>
+          <span class="eyebrow">MWESIGYE FAMILY</span>
+          <h1>Chore Tracker</h1>
+          <p>Your work. Your rewards.</p>
+        </div>
       </div>
-      <span class="pill">💰 UGX</span>
+      <span class="pill">UGX <span class="status-dot"></span></span>
     </header>
 
+    <section class="welcome-row">
+      <div>
+        <span class="section-kicker">FAMILY WORKSPACE</span>
+        <h2>Your dashboard</h2>
+        <p>Manage chores, earnings and savings.</p>
+      </div>
+    </section>
+
     <section class="toolbar panel">
-      <label>👤 Child<select id="child"></select></label>
-      <label>📅 Day<input id="date" type="date"></label>
+      <label>CHILD
+        <select id="child"></select>
+      </label>
+      <label>DATE
+        <input id="date" type="date">
+      </label>
       <button id="today" class="secondary">Today</button>
     </section>
 
     <section class="stats">
       <div class="stat">
+        <span class="stat-icon">↗</span>
         <small>Earned today</small>
         <strong id="dayTotal">UGX 0</strong>
       </div>
       <div class="stat">
+        <span class="stat-icon">▦</span>
         <small>Earned this month</small>
         <strong id="monthTotal">UGX 0</strong>
       </div>
       <div class="stat">
+        <span class="stat-icon">✓</span>
         <small>Completed today</small>
         <strong id="completed">0</strong>
       </div>
     </section>
 
-    <section class="panel">
+    <section class="panel savings-panel">
       <div class="heading">
         <div>
-          <h2>💰 Savings and withdrawals</h2>
-          <p>Lifetime money summary for the selected child.</p>
+          <span class="section-kicker">PERSONAL MONEY SUMMARY</span>
+          <h2>Savings & withdrawals</h2>
+          <p>Only the selected child's money is shown.</p>
         </div>
+        <span class="section-icon">₵</span>
       </div>
 
-      <section class="stats">
+      <section class="stats money-stats">
         <div class="stat">
           <small>Total earned ever</small>
           <strong id="lifetimeEarned">UGX 0</strong>
@@ -71,38 +106,36 @@
           <small>Total withdrawn</small>
           <strong id="totalWithdrawn">UGX 0</strong>
         </div>
-        <div class="stat">
+        <div class="stat balance-stat">
           <small>Available balance</small>
           <strong id="availableBalance">UGX 0</strong>
         </div>
       </section>
 
-      <h3>Make a withdrawal</h3>
-      <form id="withdrawalForm">
-        <label>
-          Amount to withdraw (UGX)
-          <input
-            id="withdrawalAmount"
-            type="number"
-            min="1"
-            step="1"
-            placeholder="Enter amount"
-            required
-          >
-        </label>
-        <button class="primary" type="submit">Withdraw money</button>
-      </form>
-      <p id="withdrawalMessage" role="status"></p>
+      <div class="subsection">
+        <h3>Make a withdrawal</h3>
+        <p>Enter the amount to take from this child's balance.</p>
+        <form id="withdrawalForm" class="withdrawal-form">
+          <label>Amount to withdraw (UGX)
+            <input id="withdrawalAmount" type="number" min="1" step="1" placeholder="Enter amount" required>
+          </label>
+          <button class="primary" type="submit">Withdraw money</button>
+        </form>
+        <p id="withdrawalMessage" role="status"></p>
+      </div>
 
-      <h3>Withdrawal history</h3>
-      <div id="withdrawalHistory" class="entries"></div>
+      <div class="subsection">
+        <h3>Withdrawal history</h3>
+        <div id="withdrawalHistory" class="entries"></div>
+      </div>
     </section>
 
     <section class="panel">
       <div class="heading">
         <div>
+          <span class="section-kicker">DAILY TASKS</span>
           <h2>Today's chores</h2>
-          <p>Pick as many as you like. Tick Done when finished.</p>
+          <p>Choose chores and mark them done when finished.</p>
         </div>
         <button id="add" class="primary">＋ Add chores</button>
       </div>
@@ -112,28 +145,36 @@
     <section class="panel">
       <div class="heading">
         <div>
-          <h2>🏆 Monthly earnings</h2>
-          <p id="monthLabel"></p>
+          <span class="section-kicker">MONTHLY PROGRESS</span>
+          <h2>Family leaderboard</h2>
+          <p>Each child's monthly earnings are shown separately.</p>
         </div>
+        <span class="section-icon">★</span>
       </div>
+      <p id="monthLabel" class="month-label"></p>
       <div id="leaderboard"></div>
     </section>
 
     <section class="panel">
       <div class="heading">
         <div>
-          <h2>📋 Chore price list</h2>
-          <p>Based on your Excel spreadsheet.</p>
+          <span class="section-kicker">REWARD GUIDE</span>
+          <h2>Chore price list</h2>
+          <p>Rewards for each completed chore.</p>
         </div>
+        <span class="section-icon">₵</span>
       </div>
       <div id="prices" class="prices"></div>
     </section>
 
     <footer>
       <span id="syncStatus" role="status">Connecting…</span>
-      • <button id="signout" class="link">Sign out</button>
-      • <button id="export" class="link">Export backup</button>
-      • <label class="link import">Import backup<input type="file" id="import" accept="application/json" hidden></label>
+      <div class="footer-links">
+        <button id="signout" class="link">Sign out</button>
+        <button id="export" class="link">Export backup</button>
+        <label class="link import">Import backup<input type="file" id="import" accept="application/json" hidden></label>
+      </div>
+      <small>MWESIGYE FAMILY • CHORE TRACKER</small>
     </footer>
   </div>
 </main>
@@ -142,8 +183,9 @@
   <form method="dialog">
     <div class="heading">
       <div>
+        <span class="section-kicker">DAILY TASKS</span>
         <h2>Add chores</h2>
-        <p>Select multiple chores for the chosen day.</p>
+        <p>Select as many chores as you need.</p>
       </div>
       <button value="cancel" class="secondary" aria-label="Close">✕</button>
     </div>
@@ -158,23 +200,12 @@
 <script>
   if ("serviceWorker" in navigator) {
     window.addEventListener("load", () => {
-      navigator.serviceWorker
-        .register("./service-worker.js")
+      navigator.serviceWorker.register("./service-worker.js")
         .then(() => console.log("Offline support enabled"))
         .catch(error => console.error("Offline setup failed:", error));
     });
   }
 </script>
-
 <script type="module" src="script.js"></script>
-<script>
-if ("serviceWorker" in navigator) {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker.register("./service-worker.js")
-      .then(() => console.log("App ready"))
-      .catch(error => console.log("Service worker error:", error));
-  });
-}
-</script>
 </body>
 </html>
