@@ -36,11 +36,17 @@ const chores = [
   ['Serving meals (visitors or parents)', 1000],
   ['Washing shoes', 2000],
   ['Ironing clothes', 2000],
-  ['Cleaning toilet or bathroom', 1500]
+  ['Cleaning toilet or bathroom', 1500],
+['Extra Gifts', null]
 ];
 
 const kids = ['Brody', 'Mia', 'Bradley'];
+const EXTRA_GIFTS_INDEX = chores.length - 1;
 
+const chorePay = record =>
+  chores[record.chore][1] === null
+    ? record.amount
+    : chores[record.chore][1];
 const $ = id => document.getElementById(id);
 const money = n => 'UGX ' + n.toLocaleString('en-UG');
 
