@@ -1,11 +1,27 @@
+
 {
-  "name": "Home Chore Tracker",
-  "short_name": "Chore Tracker",
-  "description": "A family chore and earnings tracker.",
+  "id": "./",
+  "name": "Mwesigye Family Chore Tracker",
+  "short_name": "Family Chores",
+  "description": "Track family chores, earnings, withdrawals and investments.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#2563eb",
-  "orientation": "portrait"
+  "background_color": "#14243a",
+  "theme_color": "#14243a",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "./icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
 }
