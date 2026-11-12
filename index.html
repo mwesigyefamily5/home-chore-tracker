@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="theme-color" content="#0b1726">
+  <meta name="theme-color" content="#14243a">
   <title>Mwesigye Family | Chore Tracker</title>
   <link rel="manifest" href="./manifest.json">
   <link rel="stylesheet" href="style.css">
@@ -25,8 +25,12 @@
     <p>Sign in to manage your family's chores and savings.</p>
 
     <form id="loginForm">
-      <label>Email<input id="email" type="email" autocomplete="username" placeholder="Family email" required></label>
-      <label>Password<input id="password" type="password" autocomplete="current-password" placeholder="Password" required></label>
+      <label>Email
+        <input id="email" type="email" autocomplete="username" placeholder="Family email" required>
+      </label>
+      <label>Password
+        <input id="password" type="password" autocomplete="current-password" placeholder="Password" required>
+      </label>
       <button class="primary" type="submit">Sign in <span>→</span></button>
     </form>
     <p id="loginError" role="alert"></p>
@@ -130,6 +134,58 @@
       </div>
     </section>
 
+    <!-- INVESTMENTS -->
+    <section class="panel investment-panel">
+      <div class="heading">
+        <div>
+          <span class="section-kicker">GROW YOUR SAVINGS</span>
+          <h2>Investments</h2>
+          <p>Lock money for a chosen period and enter your own interest rate.</p>
+        </div>
+        <span class="section-icon">📈</span>
+      </div>
+
+      <section class="stats money-stats">
+        <div class="stat">
+          <small>Currently locked</small>
+          <strong id="lockedTotal">UGX 0</strong>
+        </div>
+        <div class="stat">
+          <small>Released investment payouts</small>
+          <strong id="investmentPayoutTotal">UGX 0</strong>
+        </div>
+      </section>
+
+      <div class="subsection">
+        <h3>Create an investment</h3>
+        <form id="investmentForm" class="withdrawal-form">
+          <label>Investment name
+            <input id="investmentName" type="text" maxlength="60" placeholder="e.g. New phone" required>
+          </label>
+
+          <label>Amount to invest (UGX)
+            <input id="investmentAmount" type="number" min="1" step="1" placeholder="Enter amount" required>
+          </label>
+
+          <label>Lock period (months)
+            <input id="investmentMonths" type="number" min="1" max="120" step="1" placeholder="e.g. 3" required>
+          </label>
+
+          <label>Interest rate (%)
+            <input id="investmentRate" type="number" min="0" max="1000" step="0.01" placeholder="e.g. 5" required>
+          </label>
+
+          <button class="primary" type="submit">Lock investment</button>
+        </form>
+        <p id="investmentMessage" role="status"></p>
+      </div>
+
+      <div class="subsection">
+        <h3>My investments</h3>
+        <div id="investmentHistory" class="entries"></div>
+      </div>
+    </section>
+
     <section class="panel">
       <div class="heading">
         <div>
@@ -172,7 +228,9 @@
       <div class="footer-links">
         <button id="signout" class="link">Sign out</button>
         <button id="export" class="link">Export backup</button>
-        <label class="link import">Import backup<input type="file" id="import" accept="application/json" hidden></label>
+        <label class="link import">Import backup
+          <input type="file" id="import" accept="application/json" hidden>
+        </label>
       </div>
       <small>MWESIGYE FAMILY • CHORE TRACKER</small>
     </footer>
