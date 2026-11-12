@@ -22,6 +22,10 @@ import {
 
 import { firebaseConfig } from "./firebase-config.js";
 
+// --------------------------------------------------
+// FIREBASE
+// --------------------------------------------------
+
 const appFirebase = initializeApp(firebaseConfig);
 const auth = getAuth(appFirebase);
 
@@ -60,28 +64,41 @@ let ready = false;
 let busy = false;
 let currentUser = null;
 
+// --------------------------------------------------
+// GENERAL HELPERS
+// --------------------------------------------------
+
 function money(amount) {
   return "UGX " + Math.round(amount).toLocaleString("en-UG");
 }
 
 function localDate() {
   const now = new Date();
-  const offset = now.getTimezoneOffset();
-  return new Date(now.getTime() - offset * 60000)
-    .toISOString().slice(0, 10);
+
+  return [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0")
+  ].join("-");
 }
 
 function isValidDate(value) {
-  if (typeof value !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
+    return false;
+  }
 
-  const date = new Date(value + "T00:00:00");
+  const date = new Date(value + "T00:00:00Z");
+
   return !Number.isNaN(date.getTime()) &&
     date.toISOString().slice(0, 10) === value;
 }
 
 function addMonthsToDate(dateString, months) {
   const [year, month, day] = dateString.split("-").map(Number);
+
   const target = new Date(year, month - 1 + months, 1);
 
   const lastDay = new Date(
@@ -99,10 +116,27 @@ function addMonthsToDate(dateString, months) {
   ].join("-");
 }
 
+function selectedDate() {
+  return $("date").value || localDate();
+}
+
+function selectedChild() {
+  return $("child").value;
+}
+
+function monthOf(date) {
+  return date.slice(0, 7);
+}
+
+// --------------------------------------------------
+// RECORD VALIDATION
+// --------------------------------------------------
+
 function choreAmount(record) {
   if (record.chore === chores.length - 1) {
     return record.customAmount || 0;
   }
+
   return chores[record.chore]?.price || 0;
 }
 
@@ -161,29 +195,36 @@ function validInvestment(record) {
   );
 }
 
-function investmentPayout(record) {
-  const interest = Math.round(record.amount * record.rate / 100);
-  return record.amount + interest;
-}
-
 function validRecord(record) {
-  return Boolean(
-    record &&
-    typeof record.id === "string" &&
-    record.id.length > 0 &&
-    (
-      record.type === "withdrawal"
-        ? validWithdrawal(record)
-        : record.type === "investment"
-          ? validInvestment(record)
-          : !record.type && validChore(record)
-    )
-  );
+  if (
+    !record ||
+    typeof record.id !== "string" ||
+    record.id.length === 0
+  ) {
+    return false;
+  }
+
+  if (record.type === "withdrawal") {
+    return validWithdrawal(record);
+  }
+
+  if (record.type === "investment") {
+    return validInvestment(record);
+  }
+
+  // Accept both old chores without a type field
+  // and newer chores with type: "chore".
+  if (!record.type || record.type === "chore") {
+    return validChore(record);
+  }
+
+  return false;
 }
 
 function choreRecords() {
   return records.filter(record =>
-    !record.type && validChore(record)
+    (!record.type || record.type === "chore") &&
+    validChore(record)
   );
 }
 
@@ -191,28 +232,63 @@ function withdrawalRecords() {
   return records.filter(validWithdrawal);
 }
 
+function investmentRecords() {
+  return records.filter(record =>
+    record.type === "investment" &&
+    validInvestment(record)
+  );
+}
+
+// --------------------------------------------------
+// INVESTMENT CALCULATIONS
+// --------------------------------------------------
+
+function investmentPayout(record) {
+  const interest = Math.round(
+    record.amount * record.rate / 100
+  );
+
+  return record.amount + interest;
+}
+
+// --------------------------------------------------
+// MONEY SUMMARY
+// --------------------------------------------------
+
 function moneySummary(child) {
   const earned = choreRecords()
-    .filter(record => record.child === child && record.done)
-    .reduce((sum, record) => sum + choreAmount(record), 0);
+    .filter(record =>
+      record.child === child &&
+      record.done
+    )
+    .reduce(
+      (sum, record) => sum + choreAmount(record),
+      0
+    );
 
   const withdrawn = withdrawalRecords()
     .filter(record => record.child === child)
-    .reduce((sum, record) => sum + record.amount, 0);
+    .reduce(
+      (sum, record) => sum + record.amount,
+      0
+    );
 
-  const investments = records.filter(record =>
-    record.type === "investment" &&
-    record.child === child &&
-    validInvestment(record)
-  );
+  const investments = investmentRecords()
+    .filter(record => record.child === child);
 
   const locked = investments
     .filter(record => record.status === "active")
-    .reduce((sum, record) => sum + record.amount, 0);
+    .reduce(
+      (sum, record) => sum + record.amount,
+      0
+    );
 
   const released = investments
     .filter(record => record.status === "released")
-    .reduce((sum, record) => sum + investmentPayout(record), 0);
+    .reduce(
+      (sum, record) => sum + investmentPayout(record),
+      0
+    );
 
   return {
     earned,
@@ -223,31 +299,36 @@ function moneySummary(child) {
   };
 }
 
-function selectedDate() {
-  return $("date").value || localDate();
-}
-
-function selectedChild() {
-  return $("child").value;
-}
-
-function monthOf(date) {
-  return date.slice(0, 7);
-}
+// --------------------------------------------------
+// FIRESTORE SAVE AND DELETE
+// --------------------------------------------------
 
 async function save(record) {
-  if (!currentUser) return false;
+  if (!currentUser || !record.id) {
+    return false;
+  }
 
   try {
     await setDoc(
-      doc(db, "families", currentUser.uid, "records", record.id),
+      doc(
+        db,
+        "families",
+        currentUser.uid,
+        "records",
+        record.id
+      ),
       record
     );
+
     return true;
   } catch (error) {
-    console.error(error);
-    $("syncStatus").textContent = "Save failed. Check connection.";
+    console.error("Save error:", error);
+
+    $("syncStatus").textContent =
+      "Save failed. Check your connection.";
+
     alert("Could not save. Please try again.");
+
     return false;
   }
 }
@@ -255,23 +336,38 @@ async function save(record) {
 async function removeRecord(record) {
   if (!currentUser || !ready || busy) return;
 
-  if (!confirm("Are you sure you want to delete this record?")) return;
+  if (!confirm("Are you sure you want to delete this chore?")) {
+    return;
+  }
 
   busy = true;
+
   try {
     await deleteDoc(
-      doc(db, "families", currentUser.uid, "records", record.id)
+      doc(
+        db,
+        "families",
+        currentUser.uid,
+        "records",
+        record.id
+      )
     );
   } catch (error) {
     console.error(error);
-    alert("Could not delete this record.");
+    alert("Could not delete this chore.");
   } finally {
     busy = false;
   }
 }
 
+// --------------------------------------------------
+// PRICE LIST
+// --------------------------------------------------
+
 function renderPrices() {
   const list = $("prices");
+  if (!list) return;
+
   list.replaceChildren();
 
   chores.forEach(chore => {
@@ -282,15 +378,23 @@ function renderPrices() {
     name.textContent = chore.name;
 
     const price = document.createElement("strong");
-    price.textContent = chore.custom ? "Custom amount" : money(chore.price);
+    price.textContent = chore.custom
+      ? "Custom amount"
+      : money(chore.price);
 
     row.append(name, price);
     list.append(row);
   });
 }
 
+// --------------------------------------------------
+// WITHDRAWAL HISTORY
+// --------------------------------------------------
+
 function renderWithdrawalHistory(child) {
   const history = $("withdrawalHistory");
+  if (!history) return;
+
   history.replaceChildren();
 
   const items = withdrawalRecords()
@@ -326,17 +430,21 @@ function renderWithdrawalHistory(child) {
   });
 }
 
+// --------------------------------------------------
+// INVESTMENT HISTORY
+// --------------------------------------------------
+
 function renderInvestmentHistory(child) {
   const history = $("investmentHistory");
+  if (!history) return;
+
   history.replaceChildren();
 
-  const investments = records
-    .filter(record =>
-      record.type === "investment" &&
-      record.child === child &&
-      validInvestment(record)
-    )
-    .sort((a, b) => b.startDate.localeCompare(a.startDate));
+  const investments = investmentRecords()
+    .filter(record => record.child === child)
+    .sort((a, b) =>
+      b.startDate.localeCompare(a.startDate)
+    );
 
   if (!investments.length) {
     const empty = document.createElement("div");
@@ -355,6 +463,7 @@ function renderInvestmentHistory(child) {
     name.textContent = record.name;
 
     const details = document.createElement("small");
+
     details.textContent =
       money(record.amount) +
       " • " + record.rate + "% interest" +
@@ -382,13 +491,22 @@ function renderInvestmentHistory(child) {
       releaseButton.textContent = "Release money";
 
       releaseButton.onclick = async () => {
-        if (busy || !ready || record.status !== "active") return;
-        if (record.maturityDate > localDate()) return;
+        if (
+          busy ||
+          !ready ||
+          record.status !== "active" ||
+          record.maturityDate > localDate()
+        ) {
+          return;
+        }
 
         if (!confirm(
-          "Release " + money(investmentPayout(record)) +
+          "Release " +
+          money(investmentPayout(record)) +
           " to " + child + "'s available balance?"
-        )) return;
+        )) {
+          return;
+        }
 
         busy = true;
         releaseButton.disabled = true;
@@ -414,13 +532,20 @@ function renderInvestmentHistory(child) {
   });
 }
 
+// --------------------------------------------------
+// CHORE LIST
+// --------------------------------------------------
+
 function renderChores(child, date) {
   const list = $("entries");
+  if (!list) return;
+
   list.replaceChildren();
 
   const items = choreRecords()
     .filter(record =>
-      record.child === child && record.date === date
+      record.child === child &&
+      record.date === date
     );
 
   if (!items.length) {
@@ -445,11 +570,15 @@ function renderChores(child, date) {
 
     checkbox.onchange = async () => {
       if (!ready || busy) return;
+
       busy = true;
       checkbox.disabled = true;
 
       try {
-        await save({ ...record, done: checkbox.checked });
+        await save({
+          ...record,
+          done: checkbox.checked
+        });
       } finally {
         busy = false;
       }
@@ -476,11 +605,18 @@ function renderChores(child, date) {
   });
 }
 
+// --------------------------------------------------
+// MONTHLY LEADERBOARD
+// --------------------------------------------------
+
 function renderLeaderboard() {
   const board = $("leaderboard");
+  if (!board) return;
+
   board.replaceChildren();
 
   const month = monthOf(selectedDate());
+
   $("monthLabel").textContent = "Month: " + month;
 
   kids.forEach((child, index) => {
@@ -490,7 +626,10 @@ function renderLeaderboard() {
         record.done &&
         monthOf(record.date) === month
       )
-      .reduce((sum, record) => sum + choreAmount(record), 0);
+      .reduce(
+        (sum, record) => sum + choreAmount(record),
+        0
+      );
 
     const row = document.createElement("div");
     row.className = "leader-row";
@@ -506,6 +645,10 @@ function renderLeaderboard() {
   });
 }
 
+// --------------------------------------------------
+// MAIN DASHBOARD
+// --------------------------------------------------
+
 function render() {
   if (!$("child") || !$("date")) return;
 
@@ -513,25 +656,35 @@ function render() {
   const date = selectedDate();
   const month = monthOf(date);
 
-  const dayItems = choreRecords().filter(record =>
-    record.child === child && record.date === date
-  );
+  const dayItems = choreRecords()
+    .filter(record =>
+      record.child === child &&
+      record.date === date
+    );
 
-  const monthItems = choreRecords().filter(record =>
-    record.child === child &&
-    record.done &&
-    monthOf(record.date) === month
-  );
+  const monthItems = choreRecords()
+    .filter(record =>
+      record.child === child &&
+      record.done &&
+      monthOf(record.date) === month
+    );
 
   const dayEarned = dayItems
     .filter(record => record.done)
-    .reduce((sum, record) => sum + choreAmount(record), 0);
+    .reduce(
+      (sum, record) => sum + choreAmount(record),
+      0
+    );
 
   const monthEarned = monthItems
-    .reduce((sum, record) => sum + choreAmount(record), 0);
+    .reduce(
+      (sum, record) => sum + choreAmount(record),
+      0
+    );
 
   $("dayTotal").textContent = money(dayEarned);
   $("monthTotal").textContent = money(monthEarned);
+
   $("completed").textContent =
     dayItems.filter(record => record.done).length;
 
@@ -549,6 +702,10 @@ function render() {
   renderLeaderboard();
   renderPrices();
 }
+
+// --------------------------------------------------
+// CHORE PICKER
+// --------------------------------------------------
 
 function buildChorePicker() {
   const choices = $("choices");
@@ -575,6 +732,10 @@ function buildChorePicker() {
   });
 }
 
+// --------------------------------------------------
+// LOGIN
+// --------------------------------------------------
+
 $("loginForm").onsubmit = async event => {
   event.preventDefault();
 
@@ -588,10 +749,15 @@ $("loginForm").onsubmit = async event => {
     );
   } catch (error) {
     console.error(error);
+
     $("loginError").textContent =
       "Sign-in failed. Check your email and password.";
   }
 };
+
+// --------------------------------------------------
+// FIRESTORE LIVE SYNC
+// --------------------------------------------------
 
 onAuthStateChanged(auth, user => {
   currentUser = user;
@@ -607,13 +773,17 @@ onAuthStateChanged(auth, user => {
 
   if (!user) {
     records = [];
+    render();
     return;
   }
 
   $("syncStatus").textContent = "Loading shared chores…";
 
   kids.forEach(child => {
-    if (![...$("child").options].some(option => option.value === child)) {
+    const exists = [...$("child").options]
+      .some(option => option.value === child);
+
+    if (!exists) {
       const option = document.createElement("option");
       option.value = child;
       option.textContent = child;
@@ -621,7 +791,9 @@ onAuthStateChanged(auth, user => {
     }
   });
 
-  if (!$("date").value) $("date").value = localDate();
+  if (!$("date").value) {
+    $("date").value = localDate();
+  }
 
   const recordsRef = collection(
     db,
@@ -630,21 +802,46 @@ onAuthStateChanged(auth, user => {
     "records"
   );
 
-  unsubscribe = onSnapshot(recordsRef, snapshot => {
-    records = snapshot.docs
-      .map(item => item.data())
-      .filter(validRecord);
+  unsubscribe = onSnapshot(
+    recordsRef,
 
-    ready = true;
-    $("syncStatus").textContent = "✓ Synced for everyone";
-    render();
-  }, error => {
-    console.error(error);
-    $("syncStatus").textContent = "Sync problem. Check connection.";
-  });
+    snapshot => {
+      // IMPORTANT:
+      // Firestore document ID is the real record ID.
+      // This restores compatibility with older records
+      // that do not contain an id field in their data.
+
+      records = snapshot.docs
+        .map(item => ({
+          ...item.data(),
+          id: item.id
+        }))
+        .filter(validRecord);
+
+      ready = true;
+
+      $("syncStatus").textContent =
+        "✓ Synced for everyone";
+
+      render();
+    },
+
+    error => {
+      console.error("Sync error:", error);
+
+      ready = false;
+
+      $("syncStatus").textContent =
+        "Sync problem. Check connection.";
+    }
+  );
 
   render();
 });
+
+// --------------------------------------------------
+// DASHBOARD CONTROLS
+// --------------------------------------------------
 
 $("child").onchange = render;
 $("date").onchange = render;
@@ -655,13 +852,21 @@ $("today").onclick = () => {
 };
 
 $("signout").onclick = async () => {
-  if (unsubscribe) unsubscribe();
-  unsubscribe = null;
+  if (unsubscribe) {
+    unsubscribe();
+    unsubscribe = null;
+  }
+
   await signOut(auth);
 };
 
+// --------------------------------------------------
+// ADD CHORES
+// --------------------------------------------------
+
 $("add").onclick = () => {
   if (!ready || busy) return;
+
   buildChorePicker();
   $("picker").showModal();
 };
@@ -688,18 +893,28 @@ $("saveChoices").onclick = async event => {
   busy = true;
   $("saveChoices").disabled = true;
 
+  let allSaved = true;
+
   try {
     for (const checkbox of selected) {
       const chore = Number(checkbox.value);
       let customAmount;
 
       if (chores[chore].custom) {
-        const answer = prompt("Enter the Extra Gift amount in UGX:");
-        if (answer === null) continue;
+        const answer = prompt(
+          "Enter the Extra Gift amount in UGX:"
+        );
+
+        if (answer === null) {
+          continue;
+        }
 
         customAmount = Number(answer);
 
-        if (!Number.isSafeInteger(customAmount) || customAmount <= 0) {
+        if (
+          !Number.isSafeInteger(customAmount) ||
+          customAmount <= 0
+        ) {
           alert("Enter a valid whole-number amount.");
           continue;
         }
@@ -717,15 +932,26 @@ $("saveChoices").onclick = async event => {
         record.customAmount = customAmount;
       }
 
-      await save(record);
+      const success = await save(record);
+
+      if (!success) {
+        allSaved = false;
+        break;
+      }
     }
 
-    $("picker").close();
+    if (allSaved) {
+      $("picker").close();
+    }
   } finally {
     busy = false;
     $("saveChoices").disabled = false;
   }
 };
+
+// --------------------------------------------------
+// WITHDRAWALS
+// --------------------------------------------------
 
 $("withdrawalForm").onsubmit = async event => {
   event.preventDefault();
@@ -739,8 +965,12 @@ $("withdrawalForm").onsubmit = async event => {
 
   message.textContent = "";
 
-  if (!Number.isSafeInteger(amount) || amount <= 0) {
-    message.textContent = "Enter a valid whole-number amount.";
+  if (
+    !Number.isSafeInteger(amount) ||
+    amount <= 0
+  ) {
+    message.textContent =
+      "Enter a valid whole-number amount.";
     return;
   }
 
@@ -751,12 +981,18 @@ $("withdrawalForm").onsubmit = async event => {
     return;
   }
 
-  if (!confirm("Withdraw " + money(amount) + " from " + child + "'s balance?")) {
+  if (!confirm(
+    "Withdraw " + money(amount) +
+    " from " + child + "'s balance?"
+  )) {
     return;
   }
 
   busy = true;
-  const button = $("withdrawalForm").querySelector("button");
+
+  const button = $("withdrawalForm")
+    .querySelector("button");
+
   button.disabled = true;
 
   try {
@@ -778,6 +1014,10 @@ $("withdrawalForm").onsubmit = async event => {
   }
 };
 
+// --------------------------------------------------
+// INVESTMENTS
+// --------------------------------------------------
+
 $("investmentForm").onsubmit = async event => {
   event.preventDefault();
 
@@ -788,6 +1028,7 @@ $("investmentForm").onsubmit = async event => {
   const amount = Number($("investmentAmount").value);
   const months = Number($("investmentMonths").value);
   const rate = Number($("investmentRate").value);
+
   const summary = moneySummary(child);
   const message = $("investmentMessage");
 
@@ -804,18 +1045,24 @@ $("investmentForm").onsubmit = async event => {
     rate < 0 ||
     rate > 1000
   ) {
-    message.textContent = "Please check all your investment details.";
+    message.textContent =
+      "Please check all your investment details.";
     return;
   }
 
   if (amount > summary.balance) {
     message.textContent =
-      "Not enough available money. Balance: " + money(summary.balance);
+      "Not enough available money. Balance: " +
+      money(summary.balance);
     return;
   }
 
   const startDate = localDate();
-  const maturityDate = addMonthsToDate(startDate, months);
+
+  const maturityDate = addMonthsToDate(
+    startDate,
+    months
+  );
 
   const record = {
     id: crypto.randomUUID(),
@@ -832,12 +1079,18 @@ $("investmentForm").onsubmit = async event => {
 
   if (!confirm(
     "Lock " + money(amount) +
-    " for " + months + " months at " + rate +
+    " for " + months +
+    " months at " + rate +
     "% interest until " + maturityDate + "?"
-  )) return;
+  )) {
+    return;
+  }
 
   busy = true;
-  const button = $("investmentForm").querySelector("button");
+
+  const button = $("investmentForm")
+    .querySelector("button");
+
   button.disabled = true;
 
   try {
@@ -845,13 +1098,18 @@ $("investmentForm").onsubmit = async event => {
 
     if (success) {
       $("investmentForm").reset();
-      message.textContent = "✓ Investment successfully locked!";
+      message.textContent =
+        "✓ Investment successfully locked!";
     }
   } finally {
     busy = false;
     button.disabled = false;
   }
 };
+
+// --------------------------------------------------
+// EXPORT BACKUP
+// --------------------------------------------------
 
 $("export").onclick = () => {
   const backup = {
@@ -866,8 +1124,8 @@ $("export").onclick = () => {
   );
 
   const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
 
+  const link = document.createElement("a");
   link.href = url;
   link.download = "chore-tracker-backup.json";
   link.click();
@@ -875,9 +1133,16 @@ $("export").onclick = () => {
   URL.revokeObjectURL(url);
 };
 
+// --------------------------------------------------
+// IMPORT BACKUP
+// --------------------------------------------------
+
 $("import").onchange = async event => {
   const file = event.target.files[0];
-  if (!file || !currentUser || !ready || busy) return;
+
+  if (!file || !currentUser || !ready || busy) {
+    return;
+  }
 
   try {
     const data = JSON.parse(await file.text());
@@ -894,25 +1159,41 @@ $("import").onchange = async event => {
       "Import " + data.records.length +
       " records? Existing records will not be deleted."
     )) {
-      event.target.value = "";
       return;
     }
 
     busy = true;
 
+    let allSaved = true;
+
     for (const record of data.records) {
-      await save(record);
+      const success = await save(record);
+
+      if (!success) {
+        allSaved = false;
+        break;
+      }
     }
 
-    alert("Backup imported successfully.");
+    if (allSaved) {
+      alert("Backup imported successfully.");
+    }
   } catch (error) {
     console.error(error);
-    alert("Could not import this backup. Check the file.");
+
+    alert(
+      "Could not import this backup. Check the file."
+    );
   } finally {
     busy = false;
     event.target.value = "";
   }
 };
 
+// --------------------------------------------------
+// INITIAL PAGE SETUP
+// --------------------------------------------------
+
 $("date").value = localDate();
+
 render();
