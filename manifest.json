@@ -3,7 +3,7 @@
   "id": "./",
   "name": "Mwesigye Family Chore Tracker",
   "short_name": "Family Chores",
-  "description": "Track family chores, earnings, withdrawals and investments.",
+  "description": "A family chore and earnings tracker.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
@@ -12,15 +12,9 @@
   "orientation": "portrait",
   "icons": [
     {
-      "src": "./icons/icon-192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "./icons/icon-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
       "purpose": "any"
     }
   ]
